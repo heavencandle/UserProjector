@@ -7,6 +7,19 @@ import pandas as pd
 import numpy as np
 
 
+def calc_vector(inflow, retention):
+    vector = [inflow]
+    
+    for idx in range(len(retention)):
+        if idx==0:
+            vector.append(retention[idx])
+        else:
+            vector.append(retention[idx] / retention[idx-1])
+    return vector
+
+def project_mau(population, vector):
+    return [population * element for population, element in zip(initial_population, vector)]
+
 with st.container(border=True): 
     st.write("MAU Projection")
 
@@ -45,3 +58,6 @@ with st.container(border=True):
     else:
         # by total
         col2.line_chart(chart_data, x="col1", y="col2", color="col3")
+
+
+
