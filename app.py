@@ -8,39 +8,59 @@ import pandas as pd
 import numpy as np
 
 
-def calc_vector(inflow, retention):
-    vector = [inflow]
-    
+def generate_leslie(matrix_size, inflow, retention):
+    leslie = np.zeros((matrix_size, matrix_size))
+
+    leslie[0, 0] = inflow
+
     for idx in range(len(retention)):
-        if idx==0:
-            vector.append(retention[idx])
+        if idx == 0:
+            leslie[idx + 1, 0] = retention[idx]
         else:
-            vector.append(retention[idx] / retention[idx-1])
-    return vector
+            leslie[idx + 1, idx] = retention[idx] / retention[idx - 1]
 
-def project_mau(month, initial_population, vector):
-    curr_mau = initial_population
-    mau_list = [curr_mau]
-    mau_by_month = {}
-    mau_by_age = {}
-
+    return leslie
     
-    for m in range(month):
-        next_mau = [m * v for m, v in zip(curr_mau, vector)]
-        mau_list.append(next_mau)
-        
-        curr_mau = next_mau
 
-    mau_list = np.array(mau_list)
-    mau_by_month["month"] =[m for m in range(month+1)]
-    mau_by_month["mau"] = mau_list.sum(axis=1)
+def project_mau(time_periods, initial_population, leslie_matrix):
+    current_population = initial_population
+    population_history = [current_population]
+    calculations = []
+    
+    for period  in range(time_periods):
+        next_population = np.dot(leslie_matrix, current_population)
+        calculations.append({
+            "Period": period,
+            "Current Population": current_population,
+            "Leslie Matrix": leslie_matrix,
+            "Next Population": next_population
+        })
+        population_history.append(next_population)
+        current_population = next_population
+
+    population_history = np.array(population_history)
+
+    # Creating mau_by_period dictionary
+    mau_by_period = {
+        "period": list(range(time_periods + 1)),
+        "mau": population_history.sum(axis=1)
+    }
+
+    # Creating mau_by_age dictionary
+    mau_by_age = {
+        "period": list(range(time_periods + 1))
+    }
+    mau_by_age.update({
+        f"age_{age}": population_history[:, age] for age in range(population_history.shape[1])
+    })
+
+    return mau_by_period, mau_by_age, calculations
 
 
-    mau_by_age["month"] = [m for m in range(month+1)]
-    for age, row in enumerate(np.transpose(mau_list)):
-        mau_by_age[f"age_{age}"] = row
+def dataframe_to_html(dataframe):
+    return dataframe.to_html(index=False, header=False)
 
-    return mau_by_month, mau_by_age
+calculations, leslie_matrix = {}, []
 
 with st.container(): 
     st.write("MAU Projection")
@@ -51,7 +71,7 @@ with st.container():
     with col1:
         user_age = int(st.number_input("1. User Age", step=1, key="user_age"))
 
-        month = int(st.number_input("2. Month", step=1, key="month"))
+        time_periods = int(st.number_input("2. Month", step=1, key="month"))
 
         initial_population = [st.number_input("2. Initial Population", step=1, key=f"initial_population_0")]
         for age in range(0, user_age):    
@@ -64,28 +84,82 @@ with st.container():
             retention.append(st.number_input("", step=0.01, min_value=0.0, max_value=1.0, label_visibility ="collapsed", 
                                             key=f"retention_{m}"))
     with col2:
-        st.write(f"""MAU over {month} months""")
+        st.write(f"""MAU over {time_periods} months""")
         toggle_on = st.toggle("Show by user age")
 
-        vector = calc_vector(inflow, retention)
-        mau_by_month, mau_by_age = project_mau(month, initial_population, vector)
-
-        mau_by_month = pd.DataFrame(mau_by_month)
-        mau_by_age = pd.DataFrame(mau_by_age)
+        leslie_matrix = generate_leslie(matrix_size=len(initial_population), inflow=inflow, retention=retention)
+        mau_by_period, mau_by_age, calculations = project_mau(time_periods, initial_population, leslie_matrix)
 
         if toggle_on: 
             # by user age
-            st.line_chart(mau_by_age, x="month", y=[v for v in mau_by_age.columns.values if v!= "month"])
+            st.line_chart(mau_by_age, x="period", y=[key for key in mau_by_age.keys() if key != "period"])
         else:
             # by total
-            st.line_chart(mau_by_month, x="month", y="mau")
+            st.line_chart(mau_by_period, x="period", y="mau")
         st.write(f"""Key insight zone""")
+
 
 with st.container():
     with st.expander("See calculation"):
         st.write('''
-            describe how it was calculated
+            This section describes how the populations were calculated at each time period.
         ''')
+
+        # CSS for better table design
+        table_style = """
+        <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: right;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        </style>
+        """
+
+        st.markdown(table_style, unsafe_allow_html=True)
+
+        def format_population(data):
+            return pd.DataFrame(data).astype(int)
+
+        def format_retention(data):
+            return pd.DataFrame(data).applymap(lambda x: f"{x:.2f}")
+
+        for calc in calculations:
+            st.write(f"**Calculation for Period {calc['Period']}**")
+
+            # Create columns for side-by-side display
+            col1, col2, col3 = st.columns([2.5, 5, 2.5])
+
+            # Display current population
+            with col1:
+                st.write("Current Population")
+                current_pop_df = format_population(calc["Current Population"])
+                current_pop_html = current_pop_df.to_html(index=False, header=False)
+                st.write(current_pop_html, unsafe_allow_html=True)
+
+            # Display Leslie matrix
+            with col2:
+                st.write("Leslie Matrix")
+                leslie_df = format_retention(calc["Leslie Matrix"])
+                leslie_html = leslie_df.to_html(index=False, header=False)
+                st.write(leslie_html, unsafe_allow_html=True)
+
+            # Display next population
+            with col3:
+                st.write("Next Population")
+                next_pop_df = format_population(calc["Next Population"])
+                next_pop_html = next_pop_df.to_html(index=False, header=False)
+                st.write(next_pop_html, unsafe_allow_html=True)
+
+
 
 
 
