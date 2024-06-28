@@ -66,7 +66,7 @@ with st.container():
     st.write("MAU Projection")
 
 with st.container(): 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([3, 7])
 
     with col1:
         user_age = int(st.number_input("1. User Age", step=1, key="user_age"))
@@ -83,8 +83,9 @@ with st.container():
         for m in range(1, user_age):    
             retention.append(st.number_input("", step=0.01, min_value=0.0, max_value=1.0, label_visibility ="collapsed", 
                                             key=f"retention_{m}"))
+        
+        st.button("Comfirm")
     with col2:
-        st.write(f"""MAU over {time_periods} months""")
         toggle_on = st.toggle("Show by user age")
 
         leslie_matrix = generate_leslie(matrix_size=len(initial_population), inflow=inflow, retention=retention)
