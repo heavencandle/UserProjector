@@ -6,6 +6,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from langchain.chat_models import ChatOpenAI
+
 
 
 def generate_leslie(matrix_size, inflow, retention):
@@ -21,7 +23,6 @@ def generate_leslie(matrix_size, inflow, retention):
 
     return leslie
     
-
 def project_mau(time_periods, initial_population, leslie_matrix):
     current_population = initial_population
     population_history = [current_population]
@@ -56,9 +57,30 @@ def project_mau(time_periods, initial_population, leslie_matrix):
 
     return mau_by_period, mau_by_age, calculations
 
-
 def dataframe_to_html(dataframe):
     return dataframe.to_html(index=False, header=False)
+
+def extract_insight():
+    llm = ChatOpenAI()
+
+    prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system",
+        """
+        Use the following vector or matrices to answer the question. 
+        You are a data analyst and extracting insight for ceo, product manager, or product owner.
+        You may find out the reason of increase/decrease in population, and way to increase population if population is decreasing.
+        Respond in less than 10 sentences.
+        
+        -------
+        {context}
+        """
+        ),
+        ("human", "{question}")
+    ]
+)
+
+
 
 calculations, leslie_matrix = {}, []
 
@@ -98,7 +120,6 @@ with st.container():
             # by total
             st.line_chart(mau_by_period, x="period", y="mau")
         st.write(f"""Key insight zone""")
-
 
 with st.container():
     with st.expander("See calculation"):
