@@ -1,4 +1,5 @@
-# TODO; Add minimum, fix logic, change chart, design, llm 붙여서 개선하려면 어떻게 해야하는지? 무엇이 문제인지 도출, pill with question
+# !!!important caching!!!! and button
+# TODO; Add minimum, fix logic, change chart, design,
 # zero division, placeholder
 # llm for key insight
 # Change to month label
@@ -7,8 +8,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from langchain.chat_models import ChatOpenAI
-
-
+from langchain.prompts import ChatPromptTemplate
 
 def generate_leslie(matrix_size, inflow, retention):
     leslie = np.zeros((matrix_size, matrix_size))
@@ -46,6 +46,7 @@ def project_mau(time_periods, initial_population, leslie_matrix):
         "period": list(range(time_periods + 1)),
         "mau": population_history.sum(axis=1)
     }
+    mau_by_period_arr = population_history.sum(axis=1)
 
     # Creating mau_by_age dictionary
     mau_by_age = {
@@ -54,32 +55,63 @@ def project_mau(time_periods, initial_population, leslie_matrix):
     mau_by_age.update({
         f"age_{age}": population_history[:, age] for age in range(population_history.shape[1])
     })
+    mau_by_age_arr= [population_history[:, age] for age in range(population_history.shape[1])]
 
-    return mau_by_period, mau_by_age, calculations
+    return mau_by_period, mau_by_period_arr, mau_by_age, mau_by_age_arr, calculations
 
 def dataframe_to_html(dataframe):
     return dataframe.to_html(index=False, header=False)
 
-def extract_insight():
-    llm = ChatOpenAI()
+def extract_insight(leslie_matrix, initial_population, projections):
+    projections_str = "\n\n".join([f"Month {i+1}: {p.tolist()}" for i, p in enumerate(projections)])
+
+    system_prompt = f"""
+    Use the following vector and matrices to answer the question.
+
+    You are a data analyst extracting insights for a CEO, product manager, or product owner,
+    and you are trying to analyze the number of active users in a product such as website or application.
+    Determine the reasons for population increase or decrease and suggest ways to increase the population if it is decreasing. 
+    Respond in less than 5 sentences, and try to contain the most effective reasons base on inflow and retention rather than survivorship of the result.
+    DO NOT contain content that you are not certain. 
+
+    Explanation of the Leslie Matrix Structure
+    1. Rows and Columns Represent Age Groups:
+    The population is divided into different age groups.
+    Each row and column represents one of these age groups.
+    
+    2. Structure of the Matrix:
+    The matrix is typically square, meaning it has the same number of rows and columns.
+    The size of the matrix (e.g., 3x3, 4x4) depends on the number of age groups considered.
+    
+    3.Elements of the Matrix:
+    - The numbers in the matrix represent different rates that affect the population.
+    - First Row: Only the element at [0,0] is non-zero. This element represents the inflow rate change (inflow_Month2/inflow_Month1), indicating the growth rate of new individuals entering the population.
+    - Diagonal Elements: These elements have non-zero values at positions [i+1, i] (e.g., [1,0], [2,1]). Each element indicates the retention rate as the ratio of the population in the next age group to the population in the current age group in the following period. For example, the element at [1,0] represents the retention rate for the first age group after one month, using just \(\text{retention}_1\) since there is no \(\text{retention}_0\).
+    - Other Elements: Typically zero because individuals do not transition directly from one non-adjacent age group to another (e.g., children do not become seniors directly).
+    ----------
+    Given Data
+    Leslie matrix:
+    {leslie_matrix}
+
+    Initial population:
+    {initial_population}
+
+    Here are the population projections for the next months:
+    {projections_str}
+    """
 
     prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system",
-        """
-        Use the following vector or matrices to answer the question. 
-        You are a data analyst and extracting insight for ceo, product manager, or product owner.
-        You may find out the reason of increase/decrease in population, and way to increase population if population is decreasing.
-        Respond in less than 10 sentences.
-        
-        -------
-        {context}
-        """
-        ),
-        ("human", "{question}")
-    ]
-)
+        [
+            ("system", system_prompt),
+            ("human", "Please provide insights and analysis based on these projections.")
+        ]
+    )
 
+    llm = ChatOpenAI()
+    chain = (prompt | llm)
+    response = chain.invoke({})
+
+    return response
 
 
 calculations, leslie_matrix = {}, []
@@ -111,7 +143,7 @@ with st.container():
         toggle_on = st.toggle("Show by user age")
 
         leslie_matrix = generate_leslie(matrix_size=len(initial_population), inflow=inflow, retention=retention)
-        mau_by_period, mau_by_age, calculations = project_mau(time_periods, initial_population, leslie_matrix)
+        mau_by_period, mau_by_period_arr, mau_by_age, mau_by_age_arr, calculations = project_mau(time_periods, initial_population, leslie_matrix)
 
         if toggle_on: 
             # by user age
@@ -119,7 +151,7 @@ with st.container():
         else:
             # by total
             st.line_chart(mau_by_period, x="period", y="mau")
-        st.write(f"""Key insight zone""")
+        st.write(extract_insight(leslie_matrix, initial_population, mau_by_age_arr).content)
 
 with st.container():
     with st.expander("See calculation"):
