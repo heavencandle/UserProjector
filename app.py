@@ -21,6 +21,7 @@ def generate_leslie(matrix_size, inflow, retention):
         else:
             leslie[idx + 1, idx] = retention[idx] / retention[idx - 1]
 
+    st.session_state["leslie"] = leslie
     return leslie
     
 def project_mau(time_periods, initial_population, leslie_matrix):
@@ -57,11 +58,18 @@ def project_mau(time_periods, initial_population, leslie_matrix):
     })
     mau_by_age_arr= [population_history[:, age] for age in range(population_history.shape[1])]
 
+    st.session_state["mau_by_period"] = mau_by_period
+    st.session_state["mau_by_period_arr"] = mau_by_period_arr
+    st.session_state["mau_by_age"] = mau_by_age
+    st.session_state["mau_by_age_arr"] = mau_by_age_arr
+    st.session_state["calculations"] = calculations
+
     return mau_by_period, mau_by_period_arr, mau_by_age, mau_by_age_arr, calculations
 
 def dataframe_to_html(dataframe):
     return dataframe.to_html(index=False, header=False)
 
+@st.cache_data(show_spinner=False)
 def extract_insight(leslie_matrix, initial_population, retentions, projections):
     projections_str = "\n\n".join([f"Month {i+1}: {p.tolist()}" for i, p in enumerate(projections)])
 
@@ -120,6 +128,23 @@ def extract_insight(leslie_matrix, initial_population, retentions, projections):
 
     return response
 
+def draw_chart(toggle_on):
+    mau_by_age = st.session_state.mau_by_age
+    mau_by_period = st.session_state.mau_by_period
+
+    leslie_matrix = st.session_state.leslie
+    initial_population = st.session_state.initial_population
+
+    retention = st.session_state.retention
+    mau_by_age_arr = st.session_state.mau_by_age_arr
+    
+    if toggle_on: 
+        # by user age
+        st.line_chart(mau_by_age, x="period", y=[key for key in mau_by_age.keys() if key != "period"])
+    else:
+        # by total
+        st.line_chart(mau_by_period, x="period", y="mau")
+    st.write(extract_insight(leslie_matrix, initial_population, retention, mau_by_age_arr).content)
 
 calculations, leslie_matrix = {}, []
 
@@ -142,85 +167,103 @@ with st.container():
         inflow = st.number_input("3. Inflow", step=0.01, key=f"inflow")
         retention = [st.number_input("4. Retention", step=0.01, min_value=0.0, max_value=1.0, key=f"retention_0")]
         for m in range(1, user_age):    
-            retention.append(st.number_input("", step=0.01, min_value=0.0, max_value=1.0, label_visibility ="collapsed", 
-                                            key=f"retention_{m}"))
+            retention.append(st.number_input("", step=0.01, min_value=0.0, max_value=1.0, label_visibility ="collapsed", key=f"retention_{m}"))
         
-        st.button("Comfirm")
+        button_click = st.button("Comfirm")
+        
+        if button_click:
+            if user_age>0 and time_periods>0:
+                try:
+                    st.session_state["button_click"]+=1
+                    st.write(st.session_state["button_click"])
+                except:
+                    st.session_state["button_click"]=1
+                    st.write(st.session_state["button_click"])
+            else:
+                st.toast("User Age and Month should be bigger than 0.")   
+    
+
+        st.session_state["time_periods"] = time_periods
+        st.session_state["initial_population"] = initial_population
+        st.session_state["retention"] = retention
+        
     with col2:
-        toggle_on = st.toggle("Show by user age")
+        try: 
+            if st.session_state.button_click >= 1:
+                toggle_on=st.toggle("Show by user age")
+                st.session_state["toggle_on"] = toggle_on
 
-        leslie_matrix = generate_leslie(matrix_size=len(initial_population), inflow=inflow, retention=retention)
-        mau_by_period, mau_by_period_arr, mau_by_age, mau_by_age_arr, calculations = project_mau(time_periods, initial_population, leslie_matrix)
+                leslie_matrix = generate_leslie(matrix_size=len(initial_population), inflow=inflow, retention=retention)
+                mau_by_period, mau_by_period_arr, mau_by_age, mau_by_age_arr, calculations = project_mau(time_periods, initial_population, leslie_matrix)
 
-        if toggle_on: 
-            # by user age
-            st.line_chart(mau_by_age, x="period", y=[key for key in mau_by_age.keys() if key != "period"])
-        else:
-            # by total
-            st.line_chart(mau_by_period, x="period", y="mau")
-        st.write(extract_insight(leslie_matrix, initial_population, retention, mau_by_age_arr).content)
+                draw_chart(st.session_state["toggle_on"])
+        except:
+            pass
+                
 
 with st.container():
-    with st.expander("See calculation"):
-        st.write('''
-            This section describes how the populations were calculated at each time period.
-        ''')
+    try: 
+        if st.session_state.button_click >= 1:
+            with st.expander("See calculation"):
+                st.write('''
+                    This section describes how the populations were calculated at each time period.
+                ''')
 
-        # CSS for better table design
-        table_style = """
-        <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 8px 12px;
-            text-align: right;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        table, th, td {
-            border: 1px solid #ddd;
-        }
-        </style>
-        """
+                # CSS for better table design
+                table_style = """
+                <style>
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                th, td {
+                    padding: 8px 12px;
+                    text-align: right;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                }
+                table, th, td {
+                    border: 1px solid #ddd;
+                }
+                </style>
+                """
 
-        st.markdown(table_style, unsafe_allow_html=True)
+                st.markdown(table_style, unsafe_allow_html=True)
 
-        def format_population(data):
-            return pd.DataFrame(data).astype(int)
+                def format_population(data):
+                    return pd.DataFrame(data).astype(int)
 
-        def format_retention(data):
-            return pd.DataFrame(data).applymap(lambda x: f"{x:.2f}")
+                def format_retention(data):
+                    return pd.DataFrame(data).applymap(lambda x: f"{x:.2f}")
 
-        for calc in calculations:
-            st.write(f"**Calculation for Period {calc['Period']}**")
+                for calc in calculations:
+                    st.write(f"**Calculation for Period {calc['Period']}**")
 
-            # Create columns for side-by-side display
-            col1, col2, col3 = st.columns([2.5, 5, 2.5])
+                    # Create columns for side-by-side display
+                    col1, col2, col3 = st.columns([2.5, 5, 2.5])
 
-            # Display current population
-            with col1:
-                st.write("Current Population")
-                current_pop_df = format_population(calc["Current Population"])
-                current_pop_html = current_pop_df.to_html(index=False, header=False)
-                st.write(current_pop_html, unsafe_allow_html=True)
+                    # Display current population
+                    with col1:
+                        st.write("Current Population")
+                        current_pop_df = format_population(calc["Current Population"])
+                        current_pop_html = current_pop_df.to_html(index=False, header=False)
+                        st.write(current_pop_html, unsafe_allow_html=True)
 
-            # Display Leslie matrix
-            with col2:
-                st.write("Leslie Matrix")
-                leslie_df = format_retention(calc["Leslie Matrix"])
-                leslie_html = leslie_df.to_html(index=False, header=False)
-                st.write(leslie_html, unsafe_allow_html=True)
+                    # Display Leslie matrix
+                    with col2:
+                        st.write("Leslie Matrix")
+                        leslie_df = format_retention(calc["Leslie Matrix"])
+                        leslie_html = leslie_df.to_html(index=False, header=False)
+                        st.write(leslie_html, unsafe_allow_html=True)
 
-            # Display next population
-            with col3:
-                st.write("Next Population")
-                next_pop_df = format_population(calc["Next Population"])
-                next_pop_html = next_pop_df.to_html(index=False, header=False)
-                st.write(next_pop_html, unsafe_allow_html=True)
-
-
+                    # Display next population
+                    with col3:
+                        st.write("Next Population")
+                        next_pop_df = format_population(calc["Next Population"])
+                        next_pop_html = next_pop_df.to_html(index=False, header=False)
+                        st.write(next_pop_html, unsafe_allow_html=True)
+    except:
+        pass
 
 
 
