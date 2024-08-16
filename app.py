@@ -62,7 +62,7 @@ def project_mau(time_periods, initial_population, leslie_matrix):
 def dataframe_to_html(dataframe):
     return dataframe.to_html(index=False, header=False)
 
-def extract_insight(leslie_matrix, initial_population, projections):
+def extract_insight(leslie_matrix, initial_population, retentions, projections):
     projections_str = "\n\n".join([f"Month {i+1}: {p.tolist()}" for i, p in enumerate(projections)])
 
     system_prompt = f"""
@@ -71,13 +71,17 @@ def extract_insight(leslie_matrix, initial_population, projections):
     You are a data analyst extracting insights for a CEO, product manager, or product owner,
     and you are trying to analyze the number of active users in a product such as website or application.
     Determine the reasons for population increase or decrease and suggest ways to increase the population if it is decreasing. 
-    Respond in less than 5 sentences, and try to contain the most effective reasons base on inflow and retention rather than survivorship of the result.
+    Important:Respond in no more than than 5 sentences, and try to contain:
+    - the most effective reasons based on inflow and retention.
+    - or which age group they need to concentrate on.
+    DO NOT confuse the idea of retention and survivorship, use straightforward word and do not confusing use word like "retention rate" rather use retention or survivorship.
     DO NOT contain content that you are not certain. 
 
     Explanation of the Leslie Matrix Structure
     1. Rows and Columns Represent Age Groups:
     The population is divided into different age groups.
     Each row and column represents one of these age groups.
+    Age means how many months they have been using the product, user age starts from 0 when they entered the product and change to 1 the next month.
     
     2. Structure of the Matrix:
     The matrix is typically square, meaning it has the same number of rows and columns.
@@ -95,6 +99,9 @@ def extract_insight(leslie_matrix, initial_population, projections):
 
     Initial population:
     {initial_population}
+
+    Retention:
+    {retentions}
 
     Here are the population projections for the next months:
     {projections_str}
@@ -151,7 +158,7 @@ with st.container():
         else:
             # by total
             st.line_chart(mau_by_period, x="period", y="mau")
-        st.write(extract_insight(leslie_matrix, initial_population, mau_by_age_arr).content)
+        st.write(extract_insight(leslie_matrix, initial_population, retention, mau_by_age_arr).content)
 
 with st.container():
     with st.expander("See calculation"):
