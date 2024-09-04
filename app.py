@@ -1,14 +1,11 @@
-# !!!important caching!!!! and button
-# TODO; Add minimum, fix logic, change chart, design,
-# zero division, placeholder
-# llm for key insight
-# Change to month label
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+from streamlit_extras.stylable_container import stylable_container
+
+st.set_page_config(layout="wide")
 
 def generate_leslie(matrix_size, inflow, retention):
     leslie = np.zeros((matrix_size, matrix_size))
@@ -143,17 +140,27 @@ def draw_chart(toggle_on):
         st.line_chart(mau_by_age, x="period", y=[key for key in mau_by_age.keys() if key != "period"])
     else:
         # by total
-        st.line_chart(mau_by_period, x="period", y="mau")
+        st.line_chart(mau_by_period, x="period", y="mau", color=['#7B92FE'])
     st.write(extract_insight(leslie_matrix, initial_population, retention, mau_by_age_arr).content)
 
 calculations, leslie_matrix = {}, []
 
-with st.container(): 
-    st.write("MAU Projection")
+border_css = """
+    {
+        padding: 1rem;
+        background-color: white;
+        box-shadow: rgba(50, 50, 93, 0.25) 0px 50px 100px -20px, rgba(0, 0, 0, 0.3) 0px 30px 60px -30px;
+        border-radius: 50px;
+        margin-bottom: 1rem;
+        padding: 70px;
+    }
+    """
+with stylable_container(
+    key="container_with_shadow",
+    css_styles = border_css):
+    st.markdown("### Retention Simulator")
 
-with st.container(): 
     col1, col2 = st.columns([3, 7])
-
     with col1:
         user_age = int(st.number_input("1. User Age", step=1, key="user_age"))
 
@@ -175,10 +182,8 @@ with st.container():
             if user_age>0 and time_periods>0:
                 try:
                     st.session_state["button_click"]+=1
-                    st.write(st.session_state["button_click"])
                 except:
                     st.session_state["button_click"]=1
-                    st.write(st.session_state["button_click"])
             else:
                 st.toast("User Age and Month should be bigger than 0.")   
     
@@ -201,8 +206,41 @@ with st.container():
             pass
                 
 
-with st.container():
+
     try: 
+        st.markdown("""
+<style>
+[data-testid="stHeader"] {
+    background-color: #B8C2FE;
+}
+                    
+.stApp {
+    background-color: #B8C2FE;
+}
+                    
+[data-testid="baseButton-secondary"]{
+    background-color: #FD82AB;
+    border: 0px;
+    color: rgb(255, 255, 255);
+    box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+}
+                    
+[data-testid="baseButton-secondary"]:hover{
+    background-color: #FD82AB;
+    border: 0px;
+    color: rgb(255, 255, 255);
+}
+                    
+[data-testid="baseButton-secondary"]:focus:not(:active){
+    background-color: #FD82AB;
+    border: 0px;
+    color: rgb(255, 255, 255);
+}
+                    
+
+                    
+</style>
+""", unsafe_allow_html=True)
         if st.session_state.button_click >= 1:
             with st.expander("See calculation"):
                 st.write('''
@@ -264,6 +302,5 @@ with st.container():
                         st.write(next_pop_html, unsafe_allow_html=True)
     except:
         pass
-
 
 
