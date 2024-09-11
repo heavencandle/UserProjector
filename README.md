@@ -1,6 +1,7 @@
 # MAU Projection Tool
 
 This project is a Streamlit application that projects Monthly Active Users (MAU) based on a Leslie matrix. The tool allows users to input initial population data, inflow rate, and retention rates, and then generates projections for future periods. The application also provides insights using an LLM (Language Learning Model) to help analyze the population trends.
+<img width="1907" alt="image" src="https://github.com/user-attachments/assets/9a796305-958a-470b-9744-972959ec078d">
 
 ## Features
 
